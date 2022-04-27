@@ -1,0 +1,10 @@
+#!/bin/bash
+
+commands=""
+for name in $(cat todo | cut -f 1); do
+	commands+="./a.out ${name} 2>/dev/null\n"
+done
+
+# echo -e $commands
+echo -e $commands | parallel -j2 -k
+

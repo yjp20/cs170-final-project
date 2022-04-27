@@ -1,0 +1,2 @@
+#!/bin/bash
+find outputs -name "*.out" | tar -cf outputs.tar -T -
