@@ -13,30 +13,40 @@
 #include<utility>
 #include<random>
 
+/* #define h 1 */
 #define d(...) " [" << #__VA_ARGS__ ": " << (__VA_ARGS__) << "] "
 using namespace std;
 typedef long long ll;
 
-const int ITER = 1e3;
-const int BATCH_SIZE = 256;
-const int MAX = 2e2;
-const int MAX_ELITE = 8;
-const double DECAY = 0.950;
-const double SPREAD = 0.01;
+const int ITER = 5e3;
+const int BATCH_SIZE = 512;
+const int MAX = 1e2;
+const int MAX_N = 2e2+5;
+const int MAX_ELITE = 32;
+const double DECAY = 0.980;
+const double SPREAD = 0.00001;
+const double START = 10;
 
 char *path;
 int N, D, Rs, Rp;
 
-pair<int,int> points[BATCH_SIZE][220];
+pair<int,int> points[MAX_N];
+int order[MAX_N][MAX_N];
 int grid[MAX][MAX];
 int sol[MAX][MAX];
 
 int gen[BATCH_SIZE][MAX][MAX];
 int cover[BATCH_SIZE][MAX][MAX];
-int res[BATCH_SIZE][MAX][MAX];
+#ifdef h
+double res[BATCH_SIZE][MAX][MAX];
+#endif
+int previous[MAX][MAX];
 
 double best = 1e50;
+double best_h = 1e50;
 double gradient[MAX][MAX];
+double past_resonance[MAX][MAX];
+
 vector<double> progression_best;
 vector<double> progression_average;
 
@@ -54,6 +64,23 @@ std::mt19937 g(rd());
 		for (int jj=max(0,y-r); jj<=min(D-1,y+r); jj++) \
 			if ( (x-ii)*(x-ii) + (y-jj)*(y-jj) <= r * r)
 
+double score_h(int ans[MAX][MAX]) {
+	double sum = 0;
+	for (int x=0; x<D; x++) {
+		for (int y=0; y<D; y++) {
+			if (ans[x][y]) {
+				double resonance = 0;
+				cmap(x, y, (Rp+4)) {
+					double dist = sqrt((x-i) * (x-i) + (y-j) * (y-j));
+					resonance += ans[i][j] / (1.0 + 1.0*exp(9*(dist-Rp-0.1)));
+				}
+				sum += 170 * exp(0.170 * (resonance - 1));
+			}
+		}
+	}
+	return sum;
+}
+
 double score(int ans[MAX][MAX]) {
 	double sum = 0;
 	for (int x=0; x<D; x++) {
@@ -70,31 +97,56 @@ double score(int ans[MAX][MAX]) {
 	return sum;
 }
 
-double score_previous() {
+void load_previous() {
 	char filepath[100];
 	sprintf(filepath, "outputs/%s.out", path);
 	FILE *f = fopen(filepath, "r");
+
+	if (!f) {
+		for (int i=0; i<D; i++) {
+			for (int j=0; j<D; j++) {
+				previous[i][j] = 1;
+			}
+		}
+		return;
+	}
 
 	char c = fgetc(f);
 	if (c == '#') fscanf(f, "%*[^\n]");
 	else ungetc(c, f);
 
-	int prev_sol[MAX][MAX] = {0};
 	int ct;
 	fscanf(f, "%d", &ct);
 
 	for (int i=0; i<ct; i++) {
 		int a, b;
 		fscanf(f, "%d %d", &a, &b);
-		prev_sol[a][b] = 1;
+		previous[a][b] = 1;
 	}
+}
 
-	return score(prev_sol);
+void read_gradient() {
+	char filepath[100];
+	sprintf(filepath, "outputs/%s_gradient.csv", path);
+	FILE *f = fopen(filepath, "r");
+	load_previous();
+	for (int i=0; i<D; i++) {
+		int d;
+		fscanf(f, "%d,", &d);
+	}
+	for (int i=0; i<D; i++) {
+		for (int j=0; j<D; j++) {
+			/* fscanf(f, "%lf,", &gradient[i][j]); */
+			gradient[i][j] += 1;
+			gradient[i][j] += 100 * previous[i][j];
+		}
+	}
 }
 
 void output_gradient() {
 	char filepath[100];
 	sprintf(filepath, "outputs/%s_gradient.csv", path);
+
 	FILE *g = fopen(filepath, "w");
 	for (int i=0; i<D; i++) {
 		if (i) fprintf(g, ",");
@@ -140,13 +192,10 @@ void output_progression() {
 }
 
 void solve(int batch) {
-	std::shuffle(points[batch], points[batch]+N, g);
-	/* sort(points[batch], points[batch] + N, [](auto a, auto b){ */
-	/* 	return a.first * a.first + a.second * a.second < b.first * b.first + b.second * b.second; */
-	/* }); */
+	int st = rand() % N;
 
 	for (int n=0; n<N; n++) {
-		auto [x,y] = points[batch][n];
+		auto [x,y] = points[order[st][n]];
 		if (cover[batch][x][y]) continue;
 
 		double k[MAX][MAX];
@@ -154,10 +203,12 @@ void solve(int batch) {
 
 		cmap(x, y, 3) {
 			double ct = 0;
-			cmap2(i, j, 3) {
-				ct += grid[ii][jj] && !cover[batch][ii][jj];
-			}
-			double intrinsic = exp(ct/3)*2.0/(res[batch][x][y] + 1);
+			/* cmap2(i, j, 3) { */
+			/* 	ct += grid[ii][jj] && !cover[batch][ii][jj]; */
+			/* } */
+			/* double intrinsic = exp(ct*2) * exp(-past_resonance[i][j]/8); */
+			/* double intrinsic = exp(-ct/4); */
+			double intrinsic = 1;
 			sum += intrinsic * gradient[i][j];
 			k[i][j] = sum;
 		}
@@ -178,9 +229,6 @@ k:
 		gen[batch][cx][cy] = 1;
 		cmap(cx, cy, 3) {
 			cover[batch][i][j] = 1;
-		}
-		cmap(cx, cy, 8) {
-			res[batch][i][j] += 1;
 		}
 	}
 }
@@ -207,15 +255,48 @@ int main(int argc, char *argv[]) {
 		int a, b;
 		fscanf(f, "%d %d", &a, &b);
 		grid[a][b] = 1;
-		for (int j=0; j<BATCH_SIZE; j++) {
-			points[j][i] = {a,b};
+		points[i] = {a,b};
+	}
+
+	for (int st=0; st<N; st++) {
+		order[st][0] = st;
+
+		int used[MAX_N] = {0};
+		used[st] = 1;
+
+		for (int i=1; i<N; i++) {
+			int best_point;
+			int best = 1e9;
+			for (int j=0; j<N; j++) {
+				if (used[j]) continue;
+				int least = 1e9;
+				auto a = points[j];
+				for (int k=0; k<N; k++) {
+					if (!used[k]) continue;
+					auto b = points[k];
+					least = min(
+							least,
+							(a.first - b.first) * (a.first - b.first) +
+							(a.second - b.second) * (a.second - b.second));
+				}
+				if (least < best) {
+					best = least;
+					best_point = j;
+				}
+			}
+			used[best_point] = 1;
+			order[st][i] = best_point;
 		}
 	}
 
-	for (int i=0; i<D; i++) {
-		for (int j=0; j<D; j++) {
-			gradient[i][j] = 1;
+	if (argc == 2) {
+		for (int i=0; i<D; i++) {
+			for (int j=0; j<D; j++) {
+				gradient[i][j] = START;
+			}
 		}
+	} else {
+		read_gradient();
 	}
 
 	// sort(points, points+N);
@@ -223,34 +304,31 @@ int main(int argc, char *argv[]) {
 	for (int t=0; t<=ITER; t++) {
 		memset(gen, 0, sizeof gen);
 		memset(cover, 0, sizeof cover);
+#ifdef h
 		memset(res, 0, sizeof res);
-		#pragma omp parallel for
-		for (int b=0; b<BATCH_SIZE; b++) {
-			solve(b);
-		}
+#endif
 
 		double batch_best = 1e50;
 		double batch_avg = 0;
+		tuple<double,double,int> rank[BATCH_SIZE];
 
-		pair<double,int> rank[BATCH_SIZE];
-
+#pragma omp parallel for
 		for (int b=0; b<BATCH_SIZE; b++) {
+			solve(b);
 			double s = score(gen[b]);
-			rank[b] = {s,b};
-			batch_avg += s;
-			batch_best = min(batch_best, s);
+			double s_h = score_h(gen[b]);
+			rank[b] = {s,s_h,b};
+		}
 
-			if (s < best) {
-				best = s;
-				for (int i=0; i<D; i++) {
-					for (int j=0; j<D; j++) {
-						sol[i][j] = gen[b][i][j];
-					}
-				}
-			}
+		for (int i=0; i<BATCH_SIZE; i++) {
+			auto [s, s_h, b] = rank[i];
+			batch_best = min(batch_best, s);
+			best_h = min(best_h, s_h);
+			batch_avg += s;
 		}
 
 		double new_gradient[MAX][MAX];
+		memset(past_resonance, 0, sizeof(past_resonance));
 
 		for (int i=0; i<D; i++) {
 			for (int j=0; j<D; j++) {
@@ -265,11 +343,24 @@ int main(int argc, char *argv[]) {
 		sort(rank, rank+BATCH_SIZE);
 
 		for (int c=0; c<MAX_ELITE; c++) {
-			auto [s, b] = rank[c];
+			auto [s, s_h, b] = rank[c];
+
+			if (s < best || (s == best && s_h < best_h)) {
+				best = s;
+				best_h = s_h;
+				for (int i=0; i<D; i++) {
+					for (int j=0; j<D; j++) {
+						sol[i][j] = gen[b][i][j];
+					}
+				}
+			}
+
+			double weight = pow(best / s, 3);
 
 			for (int i=0; i<D; i++) {
 				for (int j=0; j<D; j++) {
-					new_gradient[i][j] += gen[b][i][j];
+					past_resonance[i][j] += 1.0*gen[b][i][j] / MAX_ELITE;
+					new_gradient[i][j] += 1.0*gen[b][i][j] / MAX_ELITE * weight;
 				}
 			}
 		}
@@ -282,12 +373,13 @@ int main(int argc, char *argv[]) {
 
 		progression_best.push_back(batch_best);
 		progression_average.push_back(batch_avg/BATCH_SIZE);
-		fprintf(stderr, "%5d: %12lf %12lf %12lf\n", t, batch_best, batch_avg/BATCH_SIZE, best);
+		fprintf(stderr, "%5d: %13lf %13lf %13lf %13lf\n", t, batch_best, batch_avg/BATCH_SIZE, best, best_h);
 	}
 
-	double prev = score_previous();
+	load_previous();
+	double prev = score(previous);
 	cout << d(path) d(best) d(prev) << endl;
-	if (best < prev) {
+	if (best <= prev) {
 		output_gradient();
 		output_sol();
 		output_progression();

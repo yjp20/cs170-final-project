@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+
+import requests
+import math
+
+url = "https://project.cs170.dev/team/touching%20grass%20brb"
+test_url = "https://project.cs170.dev/scoreboard/{0}/"
+
+r = requests.get(url)
+d = r.json()
+i = list(filter(lambda x: x["TeamRank"], d["Entries"]))
+i.sort(key=lambda x: (-int(x["TeamRank"]), x["TestCase"]["CaseType"], x["TestCase"]["CaseID"]))
+
+def score(name):
+    if name.startswith("small"):
+        Rp = 8
+    if name.startswith("medium"):
+        Rp = 10
+    if name.startswith("large"):
+        Rp = 14
+
+    with open(f'outputs/{name}.out', "r") as f:
+        lines = f.readlines()
+        lines = [line for line in lines if line[0] != '#']
+        N = int(lines[0])
+        points = []
+        for i in range(1,N+1):
+            points.append([int(x) for x in lines[i].split(" ")])
+
+        cost = 0
+        for point in points:
+            ct = 0
+            for other in points:
+                if (point[0] - other[0])**2 + (point[1] - other[1])**2 <= Rp*Rp:
+                    ct += 1
+            cost += 170 * math.exp(0.170 * (ct - 1))
+        return cost
+
+for e in i:
+    s = f'{e["TestCase"]["CaseType"]}/{str(e["TestCase"]["CaseID"]).zfill(3)}'
+    v = score(s)
+    r = requests.get(test_url.format(s))
+    d = r.json()["Entries"]
+    best = 1e20
+    ct = 0
+    for g in d:
+        best = min(best, g["TeamScore"])
+        if v - g["TeamScore"] > 0.1:
+            ct += 1
+    if v - best > 0.1:
+        print(f'{s}\t{ct}\t{best}\t{v}')

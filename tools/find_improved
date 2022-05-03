@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+
+import math
+
+def score(name):
+    if name.startswith("small"):
+        Rp = 8
+    if name.startswith("medium"):
+        Rp = 10
+    if name.startswith("large"):
+        Rp = 14
+
+    with open(f'outputs/{name}.out', "r") as f:
+        lines = f.readlines()
+        lines = [line for line in lines if line[0] != '#']
+        N = int(lines[0])
+        points = []
+        for i in range(1,N+1):
+            points.append([int(x) for x in lines[i].split(" ")])
+
+        cost = 0
+        for point in points:
+            ct = 0
+            for other in points:
+                if (point[0] - other[0])**2 + (point[1] - other[1])**2 <= Rp*Rp:
+                    ct += 1
+            cost += 170 * math.exp(0.170 * (ct - 1))
+        return cost
+
+with open(f'todo', "r") as f:
+    lines = f.readlines()
+    lines = [line.split() for line in lines if line[0] != '#']
+    improvement = 0
+    for line in lines:
+        s = score(line[0])
+        if float(line[3]) > s:
+            print(f'{line[0]} {line[1]}: {line[3]}->{s} {line[2]} {s <= float(line[2])}')
+        if s <= float(line[2]):
+            improvement += 1
+    print(improvement)
+
+
+
+
+

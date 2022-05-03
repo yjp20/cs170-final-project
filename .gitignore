@@ -1,0 +1,6 @@
+a.out
+outputs.tar
+./a.out
+*.swp
+tmp
+__pycache__

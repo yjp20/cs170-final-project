@@ -1,13 +1,10 @@
 default:
-	g++-11 -std=c++17 -fopenmp main.cpp
-small:
-	./a.out < project-sp22-skeleton/inputs/small/001.in
-medium:
-	./a.out < inputs/medium.in
-plot_progression:
-	python3 plot_prog.py
-plot_gradient:
-	python3 plot.py
-plot_solution:
-	python3 project-sp22-skeleton/python/visualize.py $(input) --with-solution sol.out out.svg
-	open -a "Google Chrome" out.svg
+	g++-11 -std=c++17 -fopenmp -O3 main.cpp
+gen:
+	g++-11 -std=c++17 -O3 gen.cpp -o gen
+opt_sol:
+	./gen $(problem) > tmp/problem.lp
+	~/SCIPOptSuite-8.0.0-Darwin/bin/scip -c "read tmp/problem.lp" -c "optimize" -c "write solution tmp/sol" -c "exit"
+	cat tmp/sol | grep '^x' | D="$(D)" python3 tools/extract.py > tmp/out
+	mv tmp/out outputs/$(problem).out
+	./a.out $(problem) i

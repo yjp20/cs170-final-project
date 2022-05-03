@@ -1,6 +1,6 @@
 #!/bin/bash
 
-files="inputs/small/*.in"
+files="inputs/*/*.in"
 regex="^inputs/(.*)\.in$"
 
 commands=""
@@ -9,10 +9,9 @@ for file in $files; do
         then
                 echo -e ${BASH_REMATCH[1]} ${file}
                 if [ ! -f "$outputs/${BASH_REMATCH[1]}.out" ]; then
-                        commands+="./a.out ${BASH_REMATCH[1]} < $file 2>/dev/null\n"
+                        commands+="./a.out ${BASH_REMATCH[1]} i 2>/dev/null\n"
                 fi
         fi
 done
-echo -e $commands
-# echo -e $commands | parallel -j8 -k
+echo -e $commands | parallel -j6 -k
 
